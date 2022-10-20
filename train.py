@@ -38,8 +38,10 @@ def train(segmentation_module, iterator, optimizers, history, epoch, cfg, nets):
         adjust_learning_rate(optimizers, cur_iter, cfg)
 
         # forward pass
-        batch_data["img_data"] = batch_data["img_data"].cuda(1)
-        batch_data["seg_label"] = batch_data["seg_label"].cuda(1)
+
+        batch_data["img_data"] = batch_data["img_data"].cuda()
+        batch_data["seg_label"] = batch_data["seg_label"].cuda()
+
         loss, acc = segmentation_module(batch_data)
         loss = loss.mean()
         acc = acc.mean()
@@ -226,7 +228,8 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--gpus",
-        default="1",
+
+        default="0",
         help="gpus to use, e.g. 0-3 or 0,1,2,3"
     )
     parser.add_argument(
