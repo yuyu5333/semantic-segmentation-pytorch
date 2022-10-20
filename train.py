@@ -29,7 +29,7 @@ def train(segmentation_module, iterator, optimizers, history, epoch, cfg):
     tic = time.time()
     for i in range(cfg.TRAIN.epoch_iters):
         # load a batch of data
-        batch_data = next(iterator)
+        batch_data = next(iterator)[0]
         data_time.update(time.time() - tic)
         segmentation_module.zero_grad()
 
@@ -38,6 +38,8 @@ def train(segmentation_module, iterator, optimizers, history, epoch, cfg):
         adjust_learning_rate(optimizers, cur_iter, cfg)
 
         # forward pass
+        batch_data["img_data"] = batch_data["img_data"].cuda()
+        batch_data["seg_label"] = batch_data["seg_label"].cuda()
         loss, acc = segmentation_module(batch_data)
         loss = loss.mean()
         acc = acc.mean()
@@ -214,14 +216,14 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--cfg",
-        default="config/ade20k-resnet50dilated-ppm_deepsup.yaml",
+        default="config/self_config.yaml",
         metavar="FILE",
         help="path to config file",
         type=str,
     )
     parser.add_argument(
         "--gpus",
-        default="0-3",
+        default="0",
         help="gpus to use, e.g. 0-3 or 0,1,2,3"
     )
     parser.add_argument(

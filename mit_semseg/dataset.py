@@ -39,7 +39,9 @@ class BaseDataset(torch.utils.data.Dataset):
         if isinstance(odgt, list):
             self.list_sample = odgt
         elif isinstance(odgt, str):
-            self.list_sample = [json.loads(x.rstrip()) for x in open(odgt, 'r')]
+            with open(odgt,"r") as f:
+                self.list_sample = json.load(f)
+            
 
         if max_sample > 0:
             self.list_sample = self.list_sample[0:max_sample]
@@ -86,6 +88,7 @@ class TrainDataset(BaseDataset):
         while True:
             # get a sample record
             this_sample = self.list_sample[self.cur_idx]
+            # this_sample_with_info = 
             if this_sample['height'] > this_sample['width']:
                 self.batch_record_list[0].append(this_sample) # h > w, go to 1st class
             else:
