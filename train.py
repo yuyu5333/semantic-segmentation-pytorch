@@ -17,7 +17,7 @@ from mit_semseg.lib.nn import UserScatteredDataParallel, user_scattered_collate,
 
 
 # train one epoch
-def train(segmentation_module, iterator, optimizers, history, epoch, cfg):
+def train(segmentation_module, iterator, optimizers, history, epoch, cfg, nets):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     ave_total_loss = AverageMeter()
@@ -38,8 +38,10 @@ def train(segmentation_module, iterator, optimizers, history, epoch, cfg):
         adjust_learning_rate(optimizers, cur_iter, cfg)
 
         # forward pass
+
         batch_data["img_data"] = batch_data["img_data"].cuda()
         batch_data["seg_label"] = batch_data["seg_label"].cuda()
+
         loss, acc = segmentation_module(batch_data)
         loss = loss.mean()
         acc = acc.mean()
@@ -71,6 +73,9 @@ def train(segmentation_module, iterator, optimizers, history, epoch, cfg):
             history['train']['epoch'].append(fractional_epoch)
             history['train']['loss'].append(loss.data.item())
             history['train']['acc'].append(acc.data.item())
+
+            if i % 100 == 0:
+                checkpoint(nets, history, cfg, epoch+1)
 
 
 def checkpoint(nets, history, cfg, epoch):
@@ -189,7 +194,7 @@ def main(cfg, gpus):
             device_ids=gpus)
         # For sync bn
         patch_replication_callback(segmentation_module)
-    segmentation_module.cuda()
+    segmentation_module.cuda(1)
 
     # Set up optimizers
     nets = (net_encoder, net_decoder, crit)
@@ -199,7 +204,7 @@ def main(cfg, gpus):
     history = {'train': {'epoch': [], 'loss': [], 'acc': []}}
 
     for epoch in range(cfg.TRAIN.start_epoch, cfg.TRAIN.num_epoch):
-        train(segmentation_module, iterator_train, optimizers, history, epoch+1, cfg)
+        train(segmentation_module, iterator_train, optimizers, history, epoch+1, cfg, nets)
 
         # checkpointing
         checkpoint(nets, history, cfg, epoch+1)
@@ -223,6 +228,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--gpus",
+
         default="0",
         help="gpus to use, e.g. 0-3 or 0,1,2,3"
     )

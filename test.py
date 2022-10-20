@@ -64,7 +64,8 @@ def test(segmentation_module, loader, gpu):
         img_resized_list = batch_data['img_data']
 
         with torch.no_grad():
-            scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
+            # scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
+            scores = torch.zeros(1, 5, segSize[0], segSize[1])
             scores = async_copy_to(scores, gpu)
 
             for img in img_resized_list:
@@ -102,7 +103,8 @@ def main(cfg, gpu):
     net_decoder = ModelBuilder.build_decoder(
         arch=cfg.MODEL.arch_decoder,
         fc_dim=cfg.MODEL.fc_dim,
-        num_class=cfg.DATASET.num_class,
+        # num_class=cfg.DATASET.num_class,
+        num_class=5,
         weights=cfg.MODEL.weights_decoder,
         use_softmax=True)
 
@@ -145,14 +147,14 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--cfg",
-        default="config/ade20k-resnet50dilated-ppm_deepsup.yaml",
+        default="config/self_config.yaml",
         metavar="FILE",
         help="path to config file",
         type=str,
     )
     parser.add_argument(
         "--gpu",
-        default=0,
+        default=2,
         type=int,
         help="gpu id for evaluation"
     )
