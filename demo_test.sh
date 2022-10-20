@@ -35,3 +35,5 @@ python3 -u test.py \
   TEST.checkpoint epoch_20.pth
 
 fi
+
+# python3 -u test.py --imgs ./image/ --cfg config/ade20k-resnet50dilated-ppm_deepsup.yaml DIR ckpt/ade20k-resnet50dilated-ppm_deepsup/ TEST.result ./image/result TEST.checkpoint epoch_20.pth
