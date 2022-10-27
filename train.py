@@ -15,13 +15,14 @@ from mit_semseg.models import ModelBuilder, SegmentationModule
 from mit_semseg.utils import AverageMeter, parse_devices, setup_logger
 from mit_semseg.lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
 
-
 # train one epoch
 def train(segmentation_module, iterator, optimizers, history, epoch, cfg, nets):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     ave_total_loss = AverageMeter()
     ave_acc = AverageMeter()
+    ave_miou = AverageMeter()
+    ave_mrecall = AverageMeter()
 
     segmentation_module.train(not cfg.TRAIN.fix_bn)
 
@@ -38,11 +39,9 @@ def train(segmentation_module, iterator, optimizers, history, epoch, cfg, nets):
         adjust_learning_rate(optimizers, cur_iter, cfg)
 
         # forward pass
-
-        batch_data["img_data"] = batch_data["img_data"].cuda()
-        batch_data["seg_label"] = batch_data["seg_label"].cuda()
-
-        loss, acc = segmentation_module(batch_data)
+        batch_data["img_data"] = batch_data["img_data"].cuda(1)
+        batch_data["seg_label"] = batch_data["seg_label"].cuda(1)
+        loss, acc, miou, mrecall = segmentation_module(batch_data)
         loss = loss.mean()
         acc = acc.mean()
 
@@ -55,24 +54,30 @@ def train(segmentation_module, iterator, optimizers, history, epoch, cfg, nets):
         batch_time.update(time.time() - tic)
         tic = time.time()
 
-        # update average loss and acc
+        # update average loss and acc , miou and mrecall
         ave_total_loss.update(loss.data.item())
         ave_acc.update(acc.data.item()*100)
+        ave_miou.update(miou.data.item())
+        ave_mrecall.update(mrecall.data.item())
 
         # calculate accuracy, and display
         if i % cfg.TRAIN.disp_iter == 0:
             print('Epoch: [{}][{}/{}], Time: {:.2f}, Data: {:.2f}, '
                   'lr_encoder: {:.6f}, lr_decoder: {:.6f}, '
-                  'Accuracy: {:4.2f}, Loss: {:.6f}'
+                  'Accuracy: {:4.2f}, Loss: {:.6f}, '
+                  'miou: {:.4f}, mrecall: {:.4f}'
                   .format(epoch, i, cfg.TRAIN.epoch_iters,
                           batch_time.average(), data_time.average(),
                           cfg.TRAIN.running_lr_encoder, cfg.TRAIN.running_lr_decoder,
-                          ave_acc.average(), ave_total_loss.average()))
+                          ave_acc.average(), ave_total_loss.average(),
+                          ave_miou.average(), ave_mrecall.average()))
 
             fractional_epoch = epoch - 1 + 1. * i / cfg.TRAIN.epoch_iters
             history['train']['epoch'].append(fractional_epoch)
             history['train']['loss'].append(loss.data.item())
             history['train']['acc'].append(acc.data.item())
+            history['train']['miou'].append(miou.data.item())
+            history['train']['mrecall'].append(mrecall.data.item())
 
             if i % 100 == 0:
                 checkpoint(nets, history, cfg, epoch+1)
@@ -201,7 +206,7 @@ def main(cfg, gpus):
     optimizers = create_optimizers(nets, cfg)
 
     # Main loop
-    history = {'train': {'epoch': [], 'loss': [], 'acc': []}}
+    history = {'train': {'epoch': [], 'loss': [], 'acc': [], 'miou': [], 'mrecall': []}}
 
     for epoch in range(cfg.TRAIN.start_epoch, cfg.TRAIN.num_epoch):
         train(segmentation_module, iterator_train, optimizers, history, epoch+1, cfg, nets)
@@ -221,15 +226,15 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--cfg",
-        default="config/self_config.yaml",
+        # default="config/self_config.yaml",
+        default="/data/user8302433/home/work_fish/proper_work/config/self_config.yaml",
         metavar="FILE",
         help="path to config file",
         type=str,
     )
     parser.add_argument(
         "--gpus",
-
-        default="0",
+        default="1",
         help="gpus to use, e.g. 0-3 or 0,1,2,3"
     )
     parser.add_argument(
