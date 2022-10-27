@@ -63,14 +63,8 @@ class SegmentationModule(SegmentationModuleBase):
                 (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
             else:
                 pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
-<<<<<<< HEAD
             # loss = self.crit(pred, feed_dict['seg_label'])
             loss = nll_loss_balance(pred, feed_dict['seg_label'])
-=======
-
-            loss = self.crit(pred, feed_dict['seg_label'])
-            # loss = nll_loss_balance(pred, feed_dict['seg_label'])
->>>>>>> origin/HEAD
             if self.deep_sup_scale is not None:
                 loss_deepsup = nll_loss_balance(pred_deepsup, feed_dict['seg_label'])
                 loss = loss + loss_deepsup * self.deep_sup_scale
