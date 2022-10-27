@@ -13,10 +13,31 @@ class SegmentationModuleBase(nn.Module):
         _, preds = torch.max(pred, dim=1)
         valid = (label >= 0).long()
         acc_sum = torch.sum(valid * (preds == label).long())
+
+        # calculate TP,FP,FN,TN
+        # TP : pred: i, real: i
+        # FP : pred: i, real: not i
+        # FN : pred: not i, real: i
+        # TN : pred: not i, real: not i
+        TP = torch.zeros(5)
+        FP = torch.zeros(5)
+        FN = torch.zeros(5)
+        TN = torch.zeros(5)
+        for label_i in range(1,5):
+            preds_sub = preds
+            preds_sub[preds_sub==label_i]=label_i
+            preds_sub[preds_sub!=label_i]=-1
+            total_preds = torch.sum(valid * (preds_sub == label_i).long())
+            total_label = torch.sum(valid * (label == label_i).long())
+            TP[label_i] = torch.sum(valid * (preds_sub == label).long())
+            FP[label_i] = total_preds - TP[label_i]
+            FN[label_i] = total_label - TP[label_i]
+
+        miou = sum((TP / ((FN + FP + TP) + 1e-10))[1:4]) / 4
+        mrecall = sum((TP / ((TP + FN) + 1e-10))[1:4]) / 4
         pixel_sum = torch.sum(valid)
         acc = acc_sum.float() / (pixel_sum.float() + 1e-10)
-        return acc
-
+        return acc, miou, mrecall
 
 class SegmentationModule(SegmentationModuleBase):
     def __init__(self, net_enc, net_dec, crit, deep_sup_scale=None):
@@ -39,8 +60,8 @@ class SegmentationModule(SegmentationModuleBase):
                 loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'])
                 loss = loss + loss_deepsup * self.deep_sup_scale
 
-            acc = self.pixel_acc(pred, feed_dict['seg_label'])
-            return loss, acc
+            acc, miou, mrecall = self.pixel_acc(pred, feed_dict['seg_label'])
+            return loss, acc, miou, mrecall
         # inference
         else:
             pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True), segSize=segSize)
