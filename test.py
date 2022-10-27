@@ -141,9 +141,10 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--imgs",
-        required=True,
+        required=False,
         type=str,
-        help="an image path, or a directory name"
+        help="an image path, or a directory name",
+        default="./self_data/JPEGImages/"
     )
     parser.add_argument(
         "--cfg",
@@ -154,7 +155,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--gpu",
-        default=2,
+        default=0,
         type=int,
         help="gpu id for evaluation"
     )

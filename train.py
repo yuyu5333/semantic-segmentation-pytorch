@@ -39,8 +39,8 @@ def train(segmentation_module, iterator, optimizers, history, epoch, cfg, nets):
         adjust_learning_rate(optimizers, cur_iter, cfg)
 
         # forward pass
-        batch_data["img_data"] = batch_data["img_data"].cuda(1)
-        batch_data["seg_label"] = batch_data["seg_label"].cuda(1)
+        batch_data["img_data"] = batch_data["img_data"].cuda(0)
+        batch_data["seg_label"] = batch_data["seg_label"].cuda(0)
         loss, acc, miou, mrecall = segmentation_module(batch_data)
         loss = loss.mean()
         acc = acc.mean()
@@ -199,7 +199,7 @@ def main(cfg, gpus):
             device_ids=gpus)
         # For sync bn
         patch_replication_callback(segmentation_module)
-    segmentation_module.cuda(1)
+    segmentation_module.cuda(0)
 
     # Set up optimizers
     nets = (net_encoder, net_decoder, crit)
@@ -227,7 +227,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--cfg",
         # default="config/self_config.yaml",
-        default="/data/user8302433/home/work_fish/proper_work/config/self_config.yaml",
+        default="./config/self_config.yaml",
         metavar="FILE",
         help="path to config file",
         type=str,
