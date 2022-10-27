@@ -10,6 +10,7 @@ class SegmentationModuleBase(nn.Module):
         super(SegmentationModuleBase, self).__init__()
 
     def pixel_acc(self, pred, label):
+        number_class = 5
         _, preds = torch.max(pred, dim=1)
         valid = (label >= 0).long()
         acc_sum = torch.sum(valid * (preds == label).long())
@@ -19,22 +20,30 @@ class SegmentationModuleBase(nn.Module):
         # FP : pred: i, real: not i
         # FN : pred: not i, real: i
         # TN : pred: not i, real: not i
-        TP = torch.zeros(5)
-        FP = torch.zeros(5)
-        FN = torch.zeros(5)
-        TN = torch.zeros(5)
-        for label_i in range(1,5):
-            preds_sub = preds
+        TP = torch.zeros(number_class).cuda(1)
+        FP = torch.zeros(number_class).cuda(1)
+        FN = torch.zeros(number_class).cuda(1)
+        # TN = torch.zeros(number_class).cuda(1)
+        for label_i in range(0,number_class):
+            preds_sub = torch.clone(preds)
             preds_sub[preds_sub==label_i]=label_i
             preds_sub[preds_sub!=label_i]=-1
             total_preds = torch.sum(valid * (preds_sub == label_i).long())
             total_label = torch.sum(valid * (label == label_i).long())
             TP[label_i] = torch.sum(valid * (preds_sub == label).long())
-            FP[label_i] = total_preds - TP[label_i]
-            FN[label_i] = total_label - TP[label_i]
-
-        miou = sum((TP / ((FN + FP + TP) + 1e-10))[1:4]) / 4
-        mrecall = sum((TP / ((TP + FN) + 1e-10))[1:4]) / 4
+            if TP[label_i] == total_preds:
+                FP[label_i] = 0
+                FN[label_i] = total_label - TP[label_i]
+            elif TP[label_i] == total_label:
+                FN[label_i] = 0
+                FP[label_i] = total_preds - TP[label_i]
+            else:
+                FP[label_i] = total_preds - TP[label_i]
+                FN[label_i] = total_label - TP[label_i]
+        # miou = sum((TP / ((FN + FP + TP) + 1e-10))[1:4]) / (number_class - 1)
+        # mrecall = sum((TP / ((TP + FN) + 1e-10))[1:4]) / (number_class - 1)
+        miou = sum((TP / ((FN + FP + TP) + 1e-10))) / number_class
+        mrecall = sum((TP / ((TP + FN) + 1e-10))) / number_class
         pixel_sum = torch.sum(valid)
         acc = acc_sum.float() / (pixel_sum.float() + 1e-10)
         return acc, miou, mrecall
@@ -54,8 +63,14 @@ class SegmentationModule(SegmentationModuleBase):
                 (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
             else:
                 pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
+<<<<<<< HEAD
             # loss = self.crit(pred, feed_dict['seg_label'])
             loss = nll_loss_balance(pred, feed_dict['seg_label'])
+=======
+
+            loss = self.crit(pred, feed_dict['seg_label'])
+            # loss = nll_loss_balance(pred, feed_dict['seg_label'])
+>>>>>>> origin/HEAD
             if self.deep_sup_scale is not None:
                 loss_deepsup = nll_loss_balance(pred_deepsup, feed_dict['seg_label'])
                 loss = loss + loss_deepsup * self.deep_sup_scale
