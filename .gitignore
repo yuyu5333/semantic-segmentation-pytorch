@@ -13,3 +13,6 @@ ADE_val*.png
 .idea/
 
 self_data
+data/*
+*.jpg
+*.png

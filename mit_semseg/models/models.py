@@ -34,7 +34,8 @@ class SegmentationModule(SegmentationModuleBase):
             else:
                 pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
 
-            loss = self.crit(pred, feed_dict['seg_label'])
+            # loss = self.crit(pred, feed_dict['seg_label'])
+            loss = nll_loss_balance(pred, feed_dict['seg_label'])
             if self.deep_sup_scale is not None:
                 loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'])
                 loss = loss + loss_deepsup * self.deep_sup_scale
@@ -584,3 +585,30 @@ class UPerNet(nn.Module):
         x = nn.functional.log_softmax(x, dim=1)
 
         return x
+
+class NLLLoss_balance(nn.Module):
+    
+    def __init__(self):
+        super().__init__()
+    
+    def forward(predictions,labels,num_class=5):
+        score = nll_loss_balance(predictions,labels,num_class)
+        return score
+    
+def nll_loss_balance(predictions,labels,num_class=5):
+    score_sum = 0
+    for index,prediction in enumerate(predictions):
+        label = labels[index]
+        # prediction = prediction.permute(1,2,0)
+        for label_index in range(0,num_class):
+            label_mask = torch.zeros(size=label.shape).cuda()
+            label_mask[label!=label_index]=0
+            label_mask[label==label_index]=1
+            prediction_sub = (prediction*label_mask)[index]
+            
+            count = torch.count_nonzero(prediction_sub.int())
+            score = torch.sum(-prediction_sub)/(count+1)
+            
+            score_sum+=score
+    score_sum/=num_class*(index+1)
+    return score_sum
