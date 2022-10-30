@@ -95,3 +95,5 @@ _C.TEST.batch_size = 1
 _C.TEST.checkpoint = "epoch_20.pth"
 # folder to output visualization results
 _C.TEST.result = "./"
+
+_C.TEST.tem_result = "./"

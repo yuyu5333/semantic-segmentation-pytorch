@@ -42,14 +42,27 @@ def visualize_result(data, pred, cfg):
             print("  {}: {:.2f}%".format(name, ratio))
 
     # colorize prediction
+    pred = pred.astype('int')
     pred_color = colorEncode(pred, colors).astype(np.uint8)
-
+    for i in range(1,5):
+        lable_bool = pred==i
+        lable_bool_rgb = np.expand_dims(lable_bool,axis=-1)
+        lable_bool_rgb = np.concatenate([lable_bool_rgb,lable_bool_rgb,lable_bool_rgb],axis=-1)
+        lable_bool_rgb_rev = lable_bool_rgb==False
+        img_save = pred_color*lable_bool_rgb + img*lable_bool_rgb_rev
+        img_name = info.split('/')[-1]
+        if not os.path.exists(cfg.TEST.tem_result):
+            os.mkdir(cfg.TEST.tem_result)
+        Image.fromarray(img_save).save(
+        os.path.join(cfg.TEST.tem_result, img_name.replace('.jpg', '_'+str(i)+'.png')))
+        
+        
     # aggregate images and save
     im_vis = np.concatenate((img, pred_color), axis=1)
 
     img_name = info.split('/')[-1]
-    Image.fromarray(im_vis).save(
-        os.path.join(cfg.TEST.result, img_name.replace('.jpg', '.png')))
+    # Image.fromarray(im_vis).save(
+    #     os.path.join(cfg.TEST.result, img_name.replace('.jpg', '.png')))
 
 
 def test(segmentation_module, loader, gpu):

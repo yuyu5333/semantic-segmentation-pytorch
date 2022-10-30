@@ -38,5 +38,6 @@ VAL:
 TEST:
   checkpoint: "epoch_2.pth"
   result: "./test_result/"
+  tem_result: "./tem_result/"
 
 DIR: "ckpt/ade20k-mobilenetv2dilated-c1_deepsup"
