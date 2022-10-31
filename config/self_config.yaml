@@ -36,8 +36,8 @@ VAL:
   checkpoint: "epoch_20.pth"
 
 TEST:
-  checkpoint: "epoch_2.pth"
-  result: "./test_result/"
-  tem_result: "./tem_result/"
+  checkpoint: "epoch_20.pth"
+  result: "./image3_result"
+  tem_result: "./image2_temp/"
 
 DIR: "ckpt/ade20k-mobilenetv2dilated-c1_deepsup"
