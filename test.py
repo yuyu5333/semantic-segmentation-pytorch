@@ -9,7 +9,7 @@ import torch.nn as nn
 from scipy.io import loadmat
 import csv
 # Our libs
-from mit_semseg.dataset import TestDataset
+from mit_semseg.dataset import My_Test_Dataset, TestDataset
 from mit_semseg.models import ModelBuilder, SegmentationModule
 from mit_semseg.utils import colorEncode, find_recursive, setup_logger
 from mit_semseg.lib.nn import user_scattered_collate, async_copy_to
@@ -17,6 +17,7 @@ from mit_semseg.lib.utils import as_numpy
 from PIL import Image
 from tqdm import tqdm
 from mit_semseg.config import cfg
+import json
 
 colors = loadmat('data/color150.mat')['colors']
 names = {}
@@ -29,7 +30,8 @@ with open('data/object150_info.csv') as f:
 
 def visualize_result(data, pred, cfg):
     (img, info) = data
-
+    
+    img_name = info.split('/')[-1]
     # print predictions in descending order
     pred = np.int32(pred)
     pixs = pred.size
@@ -44,64 +46,94 @@ def visualize_result(data, pred, cfg):
     # colorize prediction
     pred = pred.astype('int')
     pred_color = colorEncode(pred, colors).astype(np.uint8)
+    
+    with open(cfg.TEST.height_result,"rb") as f:
+        data_infos = json.loads(f.read())
+    
+    data_info = {}
+    
     for i in range(1,5):
         lable_bool = pred==i
+        data_info[str(i)]=check_height(lable_bool)    
         lable_bool_rgb = np.expand_dims(lable_bool,axis=-1)
         lable_bool_rgb = np.concatenate([lable_bool_rgb,lable_bool_rgb,lable_bool_rgb],axis=-1)
         lable_bool_rgb_rev = lable_bool_rgb==False
         img_save = pred_color*lable_bool_rgb + img*lable_bool_rgb_rev
-        img_name = info.split('/')[-1]
+        
         if not os.path.exists(cfg.TEST.tem_result):
             os.mkdir(cfg.TEST.tem_result)
         Image.fromarray(img_save).save(
         os.path.join(cfg.TEST.tem_result, img_name.replace('.jpg', '_'+str(i)+'.png')))
+    
+    data_infos[img_name] = data_info
+    with open(cfg.TEST.height_result,"w") as f:
+        f.write(json.dumps(data_infos))
         
+    pred_color_bg = pred==0
+    pred_color_bg = np.expand_dims(pred_color_bg,axis=-1)
+    pred_color_bg = np.concatenate([pred_color_bg,pred_color_bg,pred_color_bg],axis=-1)
+    pred_color_bg = pred_color_bg==False
+    pred_color = pred_color_bg*pred_color+(pred_color_bg==False)*img
+    
+    Image.fromarray(pred_color).save(
+        os.path.join(cfg.TEST.result, img_name.replace('.jpg', '.png')))
         
     # aggregate images and save
     im_vis = np.concatenate((img, pred_color), axis=1)
 
-    img_name = info.split('/')[-1]
-    # Image.fromarray(im_vis).save(
-    #     os.path.join(cfg.TEST.result, img_name.replace('.jpg', '.png')))
+    
 
+def check_height(array):
+    height_up = 0
+    height_bottom = 0
+    
+    if not (True in array):
+        return 0
+    
+    for (index,col) in enumerate(array):
+        if True in col:
+            height_up = index
+    
+    for index in range(index,array.shape[0]):
+        if not(True in array[index]):
+            height_bottom = index
+    if height_bottom == 0:
+        height_bottom = array.shape[0]
+    
+    return height_bottom-height_up
+    
 
-def test(segmentation_module, loader, gpu):
+def test(segmentation_module, loader:My_Test_Dataset, gpu, index:int):
     segmentation_module.eval()
+    batch_data = loader.getitem(index)
+    segSize = (batch_data['img_ori'].shape[0],
+            batch_data['img_ori'].shape[1])
+    img_resized_list = batch_data['img_data']
 
-    pbar = tqdm(total=len(loader))
-    for batch_datas in loader:
-        # process data
-        for batch_data in batch_datas:
-            segSize = (batch_data['img_ori'].shape[0],
-                    batch_data['img_ori'].shape[1])
-            img_resized_list = batch_data['img_data']
+    with torch.no_grad():
+        scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
+        scores = async_copy_to(scores, gpu)
 
-            with torch.no_grad():
-                # scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
-                scores = torch.zeros(1, 5, segSize[0], segSize[1])
-                scores = async_copy_to(scores, gpu)
-
-                for img in img_resized_list:
-                    feed_dict = batch_data.copy()
-                    feed_dict['img_data'] = img
-                    del feed_dict['img_ori']
-                    del feed_dict['info']
-                    feed_dict = async_copy_to(feed_dict, gpu)
+        for img in img_resized_list:
+            feed_dict = batch_data.copy()
+            feed_dict['img_data'] = img
+            del feed_dict['img_ori']
+            del feed_dict['info']
+            feed_dict = async_copy_to(feed_dict, gpu)
 
                     # forward pass
-                    pred_tmp = segmentation_module(feed_dict, segSize=segSize)
-                    scores = scores + pred_tmp / len(cfg.DATASET.imgSizes)
+            pred_tmp = segmentation_module(feed_dict, segSize=segSize)
+            scores = scores + pred_tmp / len(cfg.DATASET.imgSizes)
 
-                _, pred = torch.max(scores, dim=1)
-                pred = as_numpy(pred.squeeze(0).cpu())
+        _, pred = torch.max(scores, dim=1)
+        pred = as_numpy(pred.squeeze(0).cpu())
 
             # visualization
-            visualize_result(
+    visualize_result(
                 (batch_data['img_ori'], batch_data['info']),
                 pred,
                 cfg
             )
-            pbar.update(1)
 
 
 def main(cfg, gpu):
@@ -125,25 +157,26 @@ def main(cfg, gpu):
     segmentation_module = SegmentationModule(net_encoder, net_decoder, crit)
 
     # Dataset and Loader
-    dataset_test = TestDataset(
+    dataset_test = My_Test_Dataset(
         cfg.list_test,
         cfg.DATASET)
-    loader_test = torch.utils.data.DataLoader(
-        dataset_test,
-        # batch_size=cfg.TEST.batch_size,
-        batch_size=8,
-        shuffle=False,
-        collate_fn=user_scattered_collate,
-        num_workers=5,
-        drop_last=True)
+    # loader_test = torch.utils.data.DataLoader(
+    #     dataset_test,
+    #     # batch_size=cfg.TEST.batch_size,
+    #     batch_size=8,
+    #     shuffle=False,
+    #     collate_fn=user_scattered_collate,
+    #     num_workers=5,
+    #     drop_last=True)
 
     segmentation_module.cuda()
 
     # Main loop
-    test(segmentation_module, loader_test, gpu)
+    test(segmentation_module, dataset_test, gpu,1)
 
     print('Inference done!')
 
+import re
 
 if __name__ == '__main__':
     
@@ -160,7 +193,7 @@ if __name__ == '__main__':
         required=False,
         type=str,
         help="an image path, or a directory name",
-        default="./image/image1_input/"
+        default="./self_data/JPEGImages/"
     )
     parser.add_argument(
         "--cfg",
@@ -206,6 +239,7 @@ if __name__ == '__main__':
     # generate testing image list
     if os.path.isdir(args.imgs):
         imgs = find_recursive(args.imgs)
+        imgs.sort(key=lambda x:float("".join(re.findall("\d",x))))
     else:
         imgs = [args.imgs]
     assert len(imgs), "imgs should be a path to image (.jpg) or directory."
