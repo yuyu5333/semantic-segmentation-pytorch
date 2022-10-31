@@ -40,4 +40,4 @@ TEST:
   result: "./image3_result"
   tem_result: "./image2_temp/"
 
-DIR: "ckpt/ade20k-mobilenetv2dilated-c1_deepsup"
+DIR: "ckpt/mobilenet"
