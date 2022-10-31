@@ -69,40 +69,39 @@ def test(segmentation_module, loader, gpu):
     segmentation_module.eval()
 
     pbar = tqdm(total=len(loader))
-    for batch_data in loader:
+    for batch_datas in loader:
         # process data
-        batch_data = batch_data[0]
-        segSize = (batch_data['img_ori'].shape[0],
-                   batch_data['img_ori'].shape[1])
-        img_resized_list = batch_data['img_data']
+        for batch_data in batch_datas:
+            segSize = (batch_data['img_ori'].shape[0],
+                    batch_data['img_ori'].shape[1])
+            img_resized_list = batch_data['img_data']
 
-        with torch.no_grad():
-            # scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
-            scores = torch.zeros(1, 5, segSize[0], segSize[1])
-            scores = async_copy_to(scores, gpu)
+            with torch.no_grad():
+                # scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
+                scores = torch.zeros(1, 5, segSize[0], segSize[1])
+                scores = async_copy_to(scores, gpu)
 
-            for img in img_resized_list:
-                feed_dict = batch_data.copy()
-                feed_dict['img_data'] = img
-                del feed_dict['img_ori']
-                del feed_dict['info']
-                feed_dict = async_copy_to(feed_dict, gpu)
+                for img in img_resized_list:
+                    feed_dict = batch_data.copy()
+                    feed_dict['img_data'] = img
+                    del feed_dict['img_ori']
+                    del feed_dict['info']
+                    feed_dict = async_copy_to(feed_dict, gpu)
 
-                # forward pass
-                pred_tmp = segmentation_module(feed_dict, segSize=segSize)
-                scores = scores + pred_tmp / len(cfg.DATASET.imgSizes)
+                    # forward pass
+                    pred_tmp = segmentation_module(feed_dict, segSize=segSize)
+                    scores = scores + pred_tmp / len(cfg.DATASET.imgSizes)
 
-            _, pred = torch.max(scores, dim=1)
-            pred = as_numpy(pred.squeeze(0).cpu())
+                _, pred = torch.max(scores, dim=1)
+                pred = as_numpy(pred.squeeze(0).cpu())
 
-        # visualization
-        visualize_result(
-            (batch_data['img_ori'], batch_data['info']),
-            pred,
-            cfg
-        )
-
-        pbar.update(1)
+            # visualization
+            visualize_result(
+                (batch_data['img_ori'], batch_data['info']),
+                pred,
+                cfg
+            )
+            pbar.update(1)
 
 
 def main(cfg, gpu):
@@ -131,7 +130,8 @@ def main(cfg, gpu):
         cfg.DATASET)
     loader_test = torch.utils.data.DataLoader(
         dataset_test,
-        batch_size=cfg.TEST.batch_size,
+        # batch_size=cfg.TEST.batch_size,
+        batch_size=8,
         shuffle=False,
         collate_fn=user_scattered_collate,
         num_workers=5,
@@ -146,6 +146,9 @@ def main(cfg, gpu):
 
 
 if __name__ == '__main__':
+    
+    
+    
     assert LooseVersion(torch.__version__) >= LooseVersion('0.4.0'), \
         'PyTorch>=0.4.0 is required'
 
@@ -157,7 +160,7 @@ if __name__ == '__main__':
         required=False,
         type=str,
         help="an image path, or a directory name",
-        default="./self_data/JPEGImages/"
+        default="./image/image1_input/"
     )
     parser.add_argument(
         "--cfg",

@@ -1,6 +1,7 @@
 # import PySide6
 # from PySide2.QtWidgets import QApplication, QMessageBox, QMainWindow
 # from PySide2 import QtWidgets
+from concurrent.futures import thread
 from PySide6.QtWidgets import QApplication, QMessageBox, QMainWindow
 from PySide6 import QtWidgets
 # from PySide2.QtUiTools import QUiLoader
@@ -16,6 +17,13 @@ import cv2
 import glob
 import sys
 
+import threading, time    # 多线程
+
+from ..test import *
+
+# 模型加载放在UI界面main中, import test.py中的推理函数, 每次执行8次
+# 每张图片隔15秒
+
 # Login_name = {'Skadi':'123456789'}
 Login_name = {'123':'123'}
 
@@ -26,6 +34,18 @@ def get_label_img(img):
     imgc = QImage(imgb.data, imgb.shape[1], imgb.shape[0], imgb.shape[1] * 3, QImage.Format_RGB888)
     return imgc
     # SI.mainWin.ui.label_image.setPixmap(QPixmap.fromImage(imgc))
+
+class Task(threading.Thread):
+    def __init__(self, master, task):
+        threading.Thread.__init__(self, target=task, args=(master,))
+
+        if not hasattr(master, 'thread_thread_run_btn') or not master.thread_thread_run_btn.is_alive():
+            master.thread_thread_run_btn = self
+            self.start()
+
+def test_thread(master):
+    print("test_thread")
+    time.sleep(5)
 
 # 登陆界面
 class Win_Login(QMainWindow):
@@ -40,7 +60,6 @@ class Win_Login(QMainWindow):
 
         self.ui = QUiLoader().load('login.ui')
         self.Login_name = Login_name
-
 
         self.ui.btn_login.clicked.connect(self.onSignIn)
         self.ui.edt_password.returnPressed.connect(self.onSignIn)
@@ -72,6 +91,8 @@ class Win_Login(QMainWindow):
         SI.mainWin.ui.show()
         self.ui.close()
 
+flag_run = 0
+
 # 主功能界面
 class Win_Main(QMainWindow):
 
@@ -79,26 +100,26 @@ class Win_Main(QMainWindow):
         super().__init__()
         self.ui = QUiLoader().load('main.ui')
         self.function(self)
+        self.para_def(self)
 
-        '''
-        # self.ui.btn_run.clicked.connect(self.predicted)
-        # self.ui.btn_display.clicked.connect(self.show_pic())
-        # self.images = glob.glob("D:/softsys/TST2/*.png")
-        # self.images = "E:/TST2/131.png"
-        # print(self.images)
-        # self.images = "E:/TST2/131.jpg"
-        # self.n = 0
-        # self.timer = QTimer(self)
-        '''
+    def para_def(self, QMainWindow):
+
+        # 推理程序是否正在运行, 0 等待中, 1 正在运行
+        self.flag_run = 0
+        self.num_threads = 0
+        self.lock = threading.Lock()
+
 
     # 功能集成函数
-    def function(self,QMainWindow):
+    def function(self, QMainWindow):
 
         # x = 0;
         # self.ui.btn_stop.clicked.connect(lambda: self.stop_botton(input=x))
         ## 控制按钮
         # 启动按钮
-        self.ui.btn_run.clicked.connect(lambda: self.run_botton())
+        # self.ui.btn_run.clicked.connect(lambda: self.run_botton())
+        self.ui.btn_run.clicked.connect(lambda: self.thread_run_btn())
+        # self.ui.btn_run.clicked.connect(lambda: Task(self, Win_Main.thread_run_btn))
         # 停止按钮
         self.ui.btn_stop.clicked.connect(lambda: self.stop_botton())
         # 退出界面
@@ -112,10 +133,31 @@ class Win_Main(QMainWindow):
         # btn_Buffy 白细胞和血小板
         self.ui.btn_Buffy.clicked.connect(lambda: self.layer_select(layer=3))
 
+        # self.thread_select_botton = threading.Thread(name='btn_select', target=self.layer_select, args=(self,0))
 
-        # self.pix1 = QPixmap('./image/test_image.png')
+    def thread_run_btn(self):
 
-        #self.label1.setPixmap('test.png') #可直接使用路径来指定图片
+        self.thread_run_botton = threading.Thread(name='run_botton'+str(self.num_threads), target=self.run_botton)
+
+        if self.flag_run == 1:
+        # if flag_run == 1:
+            QMessageBox.warning(
+                self.ui,
+                '提示',
+                '程序正在运行中, 请勿重复运行'
+            )
+        elif self.flag_run == 0:
+        # elif flag_run == 0:
+            self.lock.acquire()
+            self.flag_run = 1
+            self.thread_run_botton.start()
+            self.lock.release()
+
+        else:
+            QMessageBox.warning(
+                self.ui,
+                "error in thread_run_btn"
+            )
 
     def show_pic(self):
         '''
@@ -171,22 +213,29 @@ class Win_Main(QMainWindow):
             self.ui.label_image.setPixmap(pixmap)
             self.ui.label_image.repaint()
 
-
     # 文件夹1 2 3
-    # file1
+    # image1_input  原始图像文件, 图像输入
+    # image2_temp   中间文件, 显示结束之后删除
+    # image3_result 最终结果文件, 保存分割结果
 
     def run_botton(self):
-        print("run")
+        print("run botton")
         # 从image1加载8张图片
         # 进行推理
             # 1 保存推理完整图片
             # 2 保存三种不同语义图片
             # 3 计算血浆高度
+        
+
 
         pixmap = QPixmap("./image/test_image.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
         self.ui.label_image.setPixmap(pixmap)
         self.ui.label_image.repaint()
 
+        # 程序运行结束, flag归位, 可再次运行
+        self.flag_run = 0
+        # flag_run = 0
+        print("flag_run in run_botton: ", self.flag_run)
 
     def stop_botton(self, input=0):
         print("stop")
