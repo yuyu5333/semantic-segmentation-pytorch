@@ -97,3 +97,7 @@ _C.TEST.checkpoint = "epoch_20.pth"
 _C.TEST.result = "./"
 
 _C.TEST.tem_result = "./"
+
+_C.TEST.imgs= "./image/image1_input/"
+_C.TEST.gpu= 0
+_C.TEST.height_result= ""
