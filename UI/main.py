@@ -2,6 +2,7 @@
 # from PySide2.QtWidgets import QApplication, QMessageBox, QMainWindow
 # from PySide2 import QtWidgets
 from concurrent.futures import thread
+import shutil
 from PySide6.QtWidgets import QApplication, QMessageBox, QMainWindow
 from PySide6 import QtWidgets
 # from PySide2.QtUiTools import QUiLoader
@@ -19,6 +20,10 @@ import sys
 
 import os
 import threading, time    # 多线程
+import re
+
+import ctypes
+import inspect
 
 sys.path.append('..') 
 
@@ -111,7 +116,9 @@ class Win_Main(QMainWindow):
         self.para_def(self)
         self.function(self)
         self.get_image_list(self)
-        
+
+        # 清理缓存
+        self.clean_temp(self.main_cfg)
 
         # test
         # self.run_botton(self)
@@ -131,13 +138,8 @@ class Win_Main(QMainWindow):
         self.image_base_path = "../image"
         self.image_now_name = ""
         # 推理函数
-        # self.dataset.getitem(index)->one sample index: 0~N
-        # self.model(sample)
         self.run_pos = 0
-        self.max_num_run = 8
-        print("*"*10)
-        print(self.main_cfg.MODEL.weights_encoder)
-        print("*"*10)
+        self.max_num_run = 3
         self.model, self.dataset = export_call(self.main_cfg,self.main_cfg.TEST.gpu)
         # 样本数
         self.sample_number = len(self.dataset)
@@ -174,6 +176,8 @@ class Win_Main(QMainWindow):
             # 获取文件名以及后缀, 将后缀进行去除
             base, ext = os.path.splitext(image_name_i)
             self.image_list.append(base)
+        
+        self.image_list.sort(key=lambda x:float("".join(re.findall("\d",x))))
 
     # 开启运行线程
     def thread_run_btn(self):
@@ -224,6 +228,8 @@ class Win_Main(QMainWindow):
         
         print("*" * 15 + "run to update image name" + "*" * 15)
         
+        print("self.flag_time: ", self.flag_time)
+
         if self.flag_time == 1:
             # 计时正在运行中
             return
@@ -232,6 +238,7 @@ class Win_Main(QMainWindow):
         
         self.lock_time.acquire()
         self.flag_time = 1
+        print("self.flag_time in lock time: ", self.flag_time)
         self.num_thread_time += 1
         self.thread_time_value.start()
         self.lock_time.release()
@@ -256,6 +263,10 @@ class Win_Main(QMainWindow):
         if filename == "":
             return 
         else:
+            print("*" * 30 + "run to update_new_full_image" + "*" * 30)
+
+            print("image name now: ", path_image_temp)
+
             # 显示完整分割图像
             pixmap = QPixmap(path_image_temp + "_4.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
             # pixmap = QPixmap(self.image_base_path + "/iamge3_result/" + filename + ".png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
@@ -314,10 +325,11 @@ class Win_Main(QMainWindow):
             self.ui.label_image.setPixmap(pixmap)
             self.ui.label_image.repaint()
             painter.end()
-    # 文件夹1 2 3
-    # image1_input  原始图像文件, 图像输入
-    # image2_temp   中间文件, 显示结束之后删除
-    # image3_result 最终结果文件, 保存分割结果
+
+    def clean_temp(self,cfg):
+        if os.path.exists(cfg.TEST.tem_result):
+            shutil.rmtree(cfg.TEST.tem_result)
+            os.mkdir(cfg.TEST.tem_result)
 
     def run_botton(self):
         print("run botton")
@@ -331,33 +343,61 @@ class Win_Main(QMainWindow):
         print("*" * 30 + "run start" + "*" * 30)
 
         for run_index in range(self.max_num_run):
-            self.run_pos += run_index
-            # temp_sample = self.dataset.getitem(self.run_pos)
             test_infer(self.model,self.dataset,0,self.run_pos,self.main_cfg)
+            self.run_pos += 1
 
         print("*" * 30 + "run over" + "*" * 30)
 
-        pixmap = QPixmap("./image/test_image.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
-        painter=QPainter()
-        painter.begin(pixmap)
-        self.ui.label_image.setPixmap(pixmap)
-        self.ui.label_image.repaint()
-        painter.end()
+        # pixmap = QPixmap("./image/test_image.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+        # painter=QPainter()
+        # painter.begin(pixmap)
+        # self.ui.label_image.setPixmap(pixmap)
+        # self.ui.label_image.repaint()
+        # painter.end()
 
         # 程序运行结束, flag归位, 可再次运行
         self.flag_run = 0
         # flag_run = 0
         print("flag_run in run_botton: ", self.flag_run)
 
+    def run_over_info(self):
+        QMessageBox.warning(
+            self.ui,
+            '提示',
+            '程序运行结束，请选择图层'
+        )
+
     def stop_botton(self, input=0):
         print("stop")
+
+        self.terminator(self.thread_run_botton)
+        self.flag_run = 0
+        self.num_thread_run -= 1
 
     def exit_botton(self):
         SI.mainWin.ui.close()
         SI.loginWin = Win_Login()
         SI.loginWin.ui.show()
 
+    # 强制结束线程
+    def __async_raise(self, thread_Id, exctype):
+        #在子线程内部抛出一个异常结束线程
+        #如果线程内执行的是unittest模块的测试用例， 由于unittest内部又异常捕获处理，所有这个结束线程
+        #只能结束当前正常执行的unittest的测试用例， unittest的下一个测试用例会继续执行，只有结束继续
+        #向unittest中添加测试用例才能使线程执行完任务，然后自动结束。
+        thread_Id = ctypes.c_long(thread_Id)
+        if not inspect.isclass(exctype):
+            exctype = type(exctype)
+        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_Id, ctypes.py_object(exctype))
+        if res == 0:
+            raise ValueError("invalid thread id")
+        elif res != 1:
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_Id, None)
+            raise SystemError("PyThreadState_SEtAsyncExc failed")
 
+    def terminator(self, thread):
+        #结束线程
+        self.__async_raise(thread.ident, SystemExit)
 
 if __name__ == "__main__":
 
