@@ -1,4 +1,5 @@
 # System libs
+from modulefinder import Module
 import os
 import argparse
 from distutils.version import LooseVersion
@@ -19,9 +20,9 @@ from tqdm import tqdm
 from mit_semseg.config import cfg
 import json
 
-colors = loadmat('data/color150.mat')['colors']
+colors = loadmat('../data/color150.mat')['colors']
 names = {}
-with open('data/object150_info.csv') as f:
+with open('../data/object150_info.csv') as f:
     reader = csv.reader(f)
     next(reader)
     for row in reader:
@@ -103,7 +104,7 @@ def check_height(array):
     return height_bottom-height_up
     
 
-def test(segmentation_module, loader:My_Test_Dataset, gpu, index:int):
+def test_infer(segmentation_module, loader:My_Test_Dataset, gpu, index:int):
     segmentation_module.eval()
     batch_data = loader.getitem(index)
     segSize = (batch_data['img_ori'].shape[0],
@@ -172,9 +173,54 @@ def main(cfg, gpu):
     segmentation_module.cuda()
 
     # Main loop
-    test(segmentation_module, dataset_test, gpu,1)
+    test_infer(segmentation_module, dataset_test, gpu,1)
 
     print('Inference done!')
+
+def export_call(cfg,gpu):
+
+    if os.path.isdir(cfg.TEST.imgs):
+        imgs = find_recursive(cfg.TEST.imgs)
+        imgs.sort(key=lambda x:float("".join(re.findall("\d",x))))
+    else:
+        imgs = [args.imgs]
+    assert len(imgs), "imgs should be a path to image (.jpg) or directory."
+    cfg.list_test = [{'fpath_img': x} for x in imgs]
+
+    torch.cuda.set_device(gpu)
+    # Network Builders
+    net_encoder = ModelBuilder.build_encoder(
+        arch=cfg.MODEL.arch_encoder,
+        fc_dim=cfg.MODEL.fc_dim,
+        weights=cfg.MODEL.weights_encoder)
+    net_decoder = ModelBuilder.build_decoder(
+        arch=cfg.MODEL.arch_decoder,
+        fc_dim=cfg.MODEL.fc_dim,
+        # num_class=cfg.DATASET.num_class,
+        num_class=5,
+        weights=cfg.MODEL.weights_decoder,
+        use_softmax=True)
+
+    crit = nn.NLLLoss(ignore_index=-1)
+
+    segmentation_module = SegmentationModule(net_encoder, net_decoder, crit)
+
+    # Dataset and Loader
+    dataset_test = My_Test_Dataset(
+        cfg.list_test,
+        cfg.DATASET)
+    # loader_test = torch.utils.data.DataLoader(
+    #     dataset_test,
+    #     # batch_size=cfg.TEST.batch_size,
+    #     batch_size=8,
+    #     shuffle=False,
+    #     collate_fn=user_scattered_collate,
+    #     num_workers=5,
+    #     drop_last=True)
+
+    segmentation_module.cuda()
+    return segmentation_module,dataset_test
+
 
 import re
 
