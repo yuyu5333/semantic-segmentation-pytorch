@@ -17,7 +17,6 @@ from mit_semseg.lib.nn import user_scattered_collate, async_copy_to
 from mit_semseg.lib.utils import as_numpy
 from PIL import Image
 from tqdm import tqdm
-from mit_semseg.config import cfg
 import json
 
 colors = loadmat('../data/color150.mat')['colors']
@@ -104,7 +103,7 @@ def check_height(array):
     return height_bottom-height_up
     
 
-def test_infer(segmentation_module, loader:My_Test_Dataset, gpu, index:int):
+def test_infer(segmentation_module, loader:My_Test_Dataset, gpu, index:int,cfg):
     segmentation_module.eval()
     batch_data = loader.getitem(index)
     segSize = (batch_data['img_ori'].shape[0],
@@ -177,18 +176,19 @@ def main(cfg, gpu):
 
     print('Inference done!')
 
+import re
+
 def export_call(cfg,gpu):
 
     if os.path.isdir(cfg.TEST.imgs):
         imgs = find_recursive(cfg.TEST.imgs)
         imgs.sort(key=lambda x:float("".join(re.findall("\d",x))))
-    else:
-        imgs = [args.imgs]
     assert len(imgs), "imgs should be a path to image (.jpg) or directory."
     cfg.list_test = [{'fpath_img': x} for x in imgs]
 
     torch.cuda.set_device(gpu)
     # Network Builders
+    
     net_encoder = ModelBuilder.build_encoder(
         arch=cfg.MODEL.arch_encoder,
         fc_dim=cfg.MODEL.fc_dim,
@@ -221,75 +221,3 @@ def export_call(cfg,gpu):
     segmentation_module.cuda()
     return segmentation_module,dataset_test
 
-
-import re
-
-if __name__ == '__main__':
-    
-    assert LooseVersion(torch.__version__) >= LooseVersion('0.4.0'), \
-        'PyTorch>=0.4.0 is required'
-
-    parser = argparse.ArgumentParser(
-        description="PyTorch Semantic Segmentation Testing"
-    )
-    parser.add_argument(
-        "--imgs",
-        required=False,
-        type=str,
-        help="an image path, or a directory name",
-        default="./self_data/JPEGImages/"
-    )
-    parser.add_argument(
-        "--cfg",
-        default="config/self_config.yaml",
-        metavar="FILE",
-        help="path to config file",
-        type=str,
-    )
-    parser.add_argument(
-        "--gpu",
-        default=0,
-        type=int,
-        help="gpu id for evaluation"
-    )
-    parser.add_argument(
-        "opts",
-        help="Modify config options using the command-line",
-        default=None,
-        nargs=argparse.REMAINDER,
-    )
-    args = parser.parse_args()
-
-    cfg.merge_from_file(args.cfg)
-    cfg.merge_from_list(args.opts)
-    # cfg.freeze()
-
-    logger = setup_logger(distributed_rank=0)   # TODO
-    logger.info("Loaded configuration file {}".format(args.cfg))
-    logger.info("Running with config:\n{}".format(cfg))
-
-    cfg.MODEL.arch_encoder = cfg.MODEL.arch_encoder.lower()
-    cfg.MODEL.arch_decoder = cfg.MODEL.arch_decoder.lower()
-
-    # absolute paths of model weights
-    cfg.MODEL.weights_encoder = os.path.join(
-        cfg.DIR, 'encoder_' + cfg.TEST.checkpoint)
-    cfg.MODEL.weights_decoder = os.path.join(
-        cfg.DIR, 'decoder_' + cfg.TEST.checkpoint)
-
-    assert os.path.exists(cfg.MODEL.weights_encoder) and \
-        os.path.exists(cfg.MODEL.weights_decoder), "checkpoint does not exitst!"
-
-    # generate testing image list
-    if os.path.isdir(args.imgs):
-        imgs = find_recursive(args.imgs)
-        imgs.sort(key=lambda x:float("".join(re.findall("\d",x))))
-    else:
-        imgs = [args.imgs]
-    assert len(imgs), "imgs should be a path to image (.jpg) or directory."
-    cfg.list_test = [{'fpath_img': x} for x in imgs]
-
-    if not os.path.isdir(cfg.TEST.result):
-        os.makedirs(cfg.TEST.result)
-
-    main(cfg, args.gpu)
