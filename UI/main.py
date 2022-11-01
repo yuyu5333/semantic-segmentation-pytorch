@@ -105,7 +105,7 @@ class Win_Main(QMainWindow):
         self.ui = QUiLoader().load('main.ui')
         
         cfg.merge_from_file("../config/self_config.yaml")
-        self.cfg = cfg
+        self.main_cfg = cfg
         with open(cfg.TEST.height_result,"w") as f:
             f.write("{}")
         self.para_def(self)
@@ -135,7 +135,10 @@ class Win_Main(QMainWindow):
         # self.model(sample)
         self.run_pos = 0
         self.max_num_run = 8
-        self.model, self.dataset = export_call(self.cfg,self.cfg.TEST.gpu)
+        print("*"*10)
+        print(self.main_cfg.MODEL.weights_encoder)
+        print("*"*10)
+        self.model, self.dataset = export_call(self.main_cfg,self.main_cfg.TEST.gpu)
         # 样本数
         self.sample_number = len(self.dataset)
 
@@ -330,7 +333,7 @@ class Win_Main(QMainWindow):
         for run_index in range(self.max_num_run):
             self.run_pos += run_index
             # temp_sample = self.dataset.getitem(self.run_pos)
-            test_infer(self.model,self.dataset,0,self.run_pos)
+            test_infer(self.model,self.dataset,0,self.run_pos,self.main_cfg)
 
         print("*" * 30 + "run over" + "*" * 30)
 
