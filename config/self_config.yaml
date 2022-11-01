@@ -36,13 +36,13 @@ VAL:
   checkpoint: "epoch_20.pth"
 
 TEST:
-  checkpoint: "epoch_4.pth"
-  result: "./image3_result"
-  tem_result: "./image2_temp/"
-  imgs: "./image/image1_input/"
+  checkpoint: "epoch_20.pth"
+  result: "../image/image3_result"
+  tem_result: "../image/image2_temp/"
+  imgs: "../image/image1_input/"
   gpu: 0
-  height_result: "./height_result.json"
+  height_result: "../height_result.json"
 
   
 
-DIR: "ckpt/mobilenet"
+DIR: "../ckpt/mobilenet"

@@ -349,6 +349,9 @@ class My_Test_Dataset():
     def round2nearest_multiple(self, x, p):
         return ((x - 1) // p + 1) * p
     
+    def __len__(self):
+        return len(self.list_sample)
+
     def getitem(self, index):
         this_record = self.list_sample[index]
         # load image

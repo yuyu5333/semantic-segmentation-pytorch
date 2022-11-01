@@ -22,7 +22,9 @@ import threading, time    # 多线程
 
 sys.path.append('..') 
 
-from test import *
+from test_network import export_call,test_infer
+from mit_semseg.dataset import My_Test_Dataset
+from mit_semseg.config import cfg
 
 # 模型加载放在UI界面main中, import test.py中的推理函数, 每次执行8次
 # 每张图片隔15秒
@@ -94,7 +96,6 @@ class Win_Login(QMainWindow):
         SI.mainWin.ui.show()
         self.ui.close()
 
-flag_run = 0
 
 # 主功能界面
 class Win_Main(QMainWindow):
@@ -103,12 +104,19 @@ class Win_Main(QMainWindow):
         super().__init__()
         self.ui = QUiLoader().load('main.ui')
         
+        cfg.merge_from_file("../config/self_config.yaml")
+        self.cfg = cfg
+        with open(cfg.TEST.height_result,"w") as f:
+            f.write("{}")
         self.para_def(self)
         self.function(self)
         self.get_image_list(self)
+        
+
+        # test
+        # self.run_botton(self)
 
     def para_def(self, QMainWindow):
-
         # 启动按钮的线程
         self.flag_run = 0       # 推理程序是否正在运行, 0 等待中, 1 正在运行
         self.num_thread_run = 0
@@ -122,7 +130,15 @@ class Win_Main(QMainWindow):
         self.image_pos = 0
         self.image_base_path = "../image"
         self.image_now_name = ""
-    
+        # 推理函数
+        # self.dataset.getitem(index)->one sample index: 0~N
+        # self.model(sample)
+        self.run_pos = 0
+        self.max_num_run = 8
+        self.model, self.dataset = export_call(self.cfg,self.cfg.TEST.gpu)
+        # 样本数
+        self.sample_number = len(self.dataset)
+
     # 功能集成函数
     def function(self, QMainWindow):
 
@@ -199,7 +215,6 @@ class Win_Main(QMainWindow):
             
             return self.image_now_name
         
-    # 
     def update_image_name(self):
         # 3. 线程计数15秒
         # 需要每隔15秒更新一次 self.image_pos
@@ -229,7 +244,8 @@ class Win_Main(QMainWindow):
         self.update_new_full_image()
         
     def update_new_full_image(self, filename=""):
-        
+        # 4. 切换到下一个image
+
         filename = self.get_image_name()
         
         path_image_temp = self.image_base_path + "/image2_temp/" + filename
@@ -240,30 +256,11 @@ class Win_Main(QMainWindow):
             # 显示完整分割图像
             pixmap = QPixmap(path_image_temp + "_4.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
             # pixmap = QPixmap(self.image_base_path + "/iamge3_result/" + filename + ".png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            painter=QPainter()
+            painter.begin(pixmap)
             self.ui.label_image.setPixmap(pixmap)
             self.ui.label_image.repaint()
-            
-        # 4. 切换到下一个image
-
-    def show_pic(self):
-        '''
-        # pixmap = QPixmap(self.images[0]).scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
-        # # pixmap = QPixmap("E:/TST2/131.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
-        # self.ui.label_image.setPixmap(pixmap)
-        # self.ui.label_image.repaint()
-        # show_label_img(self.images[self.n])
-        '''
-        get_label_img(self.images)
-        self.ui.label_image.setScaledContents(True)
-        self.timer.timeout.connect(self.timer_Timeout)
-        self.timer.start(500)
-
-    def timer_Timeout(self):
-        if self.n >= (len(self.images) - 1):
-            self.timer.stop()
-        get_label_img(self.images[self.n])
-        # show_label_img(self.images)
-        self.n += 1
+            painter.end()
 
     def layer_select(self, layer=0, filename=""):
         # btn_plasma 血浆               上  _1
@@ -279,30 +276,41 @@ class Win_Main(QMainWindow):
             print("显示完整分割图像")
             pixmap = QPixmap(path_image_temp + "_4.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
             # pixmap = QPixmap(self.image_base_path + "/iamge3_result/" + filename + ".png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            painter=QPainter()
+            painter.begin(pixmap)
             self.ui.label_image.setPixmap(pixmap)
             self.ui.label_image.repaint()
+            painter.end()
         elif layer == 1:
             # 显示 btn_plasma 血浆
             # pass
             print("显示 btn_plasma 血浆")
             pixmap = QPixmap(path_image_temp + "_1.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            painter=QPainter()
+            painter.begin(pixmap)
             self.ui.label_image.setPixmap(pixmap)
             self.ui.label_image.repaint()
+            painter.end()
         elif layer == 2:
             # 显示 btn_RBCs 红细胞
             # pass
             print("显示 btn_RBCs 红细胞")
             pixmap = QPixmap(path_image_temp + "_3.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            painter=QPainter()
+            painter.begin(pixmap)
             self.ui.label_image.setPixmap(pixmap)
             self.ui.label_image.repaint()
+            painter.end()
         elif layer == 3:
             # 显示 btn_Buffy 白细胞和血小板
             # pass
             print("显示 btn_Buffy 白细胞和血小板")
             pixmap = QPixmap(path_image_temp + "_2.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            painter=QPainter()
+            painter.begin(pixmap)
             self.ui.label_image.setPixmap(pixmap)
             self.ui.label_image.repaint()
-
+            painter.end()
     # 文件夹1 2 3
     # image1_input  原始图像文件, 图像输入
     # image2_temp   中间文件, 显示结束之后删除
@@ -315,15 +323,22 @@ class Win_Main(QMainWindow):
             # 1 保存推理完整图片
             # 2 保存三种不同语义图片
             # 3 计算血浆高度
+
+        # 推理8张图片
+        print("*" * 30 + "run start" + "*" * 30)
+
+        for run_index in range(self.max_num_run):
+            self.run_pos += run_index
+            # temp_sample = self.dataset.getitem(self.run_pos)
+            test_infer(self.model,self.dataset,0,self.run_pos)
+
+        print("*" * 30 + "run over" + "*" * 30)
+
         pixmap = QPixmap("./image/test_image.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
-        
         painter=QPainter()
-        
         painter.begin(pixmap)
-        
         self.ui.label_image.setPixmap(pixmap)
         self.ui.label_image.repaint()
-        
         painter.end()
 
         # 程序运行结束, flag归位, 可再次运行
