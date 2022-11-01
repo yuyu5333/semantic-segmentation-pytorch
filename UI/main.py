@@ -12,14 +12,17 @@ from PySide6.QtCore import Qt
 from lib.share import SI
 # from PySide2.QtCore import QTimer
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtGui import QPixmap, QImage, QPainter
 import cv2
 import glob
 import sys
 
+import os
 import threading, time    # 多线程
 
-from ..test import *
+sys.path.append('..') 
+
+from test import *
 
 # 模型加载放在UI界面main中, import test.py中的推理函数, 每次执行8次
 # 每张图片隔15秒
@@ -99,17 +102,27 @@ class Win_Main(QMainWindow):
     def __init__(self):
         super().__init__()
         self.ui = QUiLoader().load('main.ui')
-        self.function(self)
+        
         self.para_def(self)
+        self.function(self)
+        self.get_image_list(self)
 
     def para_def(self, QMainWindow):
 
-        # 推理程序是否正在运行, 0 等待中, 1 正在运行
-        self.flag_run = 0
-        self.num_threads = 0
-        self.lock = threading.Lock()
-
-
+        # 启动按钮的线程
+        self.flag_run = 0       # 推理程序是否正在运行, 0 等待中, 1 正在运行
+        self.num_thread_run = 0
+        self.lock_run = threading.Lock()
+        # 计时器的线程
+        self.flag_time = 0      # 计时线程是否在运行, 0 等待中, 1 正在运行
+        self.num_thread_time = 0
+        self.lock_time = threading.Lock()
+        # 图像列表、位置、路径、名称
+        self.image_list = []
+        self.image_pos = 0
+        self.image_base_path = "../image"
+        self.image_now_name = ""
+    
     # 功能集成函数
     def function(self, QMainWindow):
 
@@ -127,17 +140,28 @@ class Win_Main(QMainWindow):
 
         ## 分层按钮
         # 显示 btn_plasma 血浆
-        self.ui.btn_plasma.clicked.connect(lambda: self.layer_select(layer=1))
+        self.ui.btn_plasma.clicked.connect(lambda: self.layer_select(filename=self.get_image_name(), layer=1))
         # 显示 btn_RBCs 红细胞
-        self.ui.btn_RBCs.clicked.connect(lambda: self.layer_select(layer=2))
+        self.ui.btn_RBCs.clicked.connect(lambda: self.layer_select(filename=self.get_image_name(), layer=2))
         # btn_Buffy 白细胞和血小板
-        self.ui.btn_Buffy.clicked.connect(lambda: self.layer_select(layer=3))
+        self.ui.btn_Buffy.clicked.connect(lambda: self.layer_select(filename=self.get_image_name(), layer=3))
+        
+        # 预先功能
+        
+    # 获取图像名称列表
+    def get_image_list(self, QMainWindow):
+        # 1. 生成文件名称的list
+        for image_name_i in os.listdir("../image/image1_input"):
+            # 获取文件名以及后缀, 将后缀进行去除
+            base, ext = os.path.splitext(image_name_i)
+            self.image_list.append(base)
 
-        # self.thread_select_botton = threading.Thread(name='btn_select', target=self.layer_select, args=(self,0))
-
+    # 开启运行线程
     def thread_run_btn(self):
 
-        self.thread_run_botton = threading.Thread(name='run_botton'+str(self.num_threads), target=self.run_botton)
+        self.thread_run_botton = threading.Thread(name='run_botton'+str(self.num_thread_run), target=self.run_botton)
+
+        print("self.num_thread_run: ", self.num_thread_run)
 
         if self.flag_run == 1:
         # if flag_run == 1:
@@ -148,16 +172,78 @@ class Win_Main(QMainWindow):
             )
         elif self.flag_run == 0:
         # elif flag_run == 0:
-            self.lock.acquire()
+            self.lock_run.acquire()
             self.flag_run = 1
+            self.num_thread_run += 1
             self.thread_run_botton.start()
-            self.lock.release()
+            self.lock_run.release()
 
         else:
             QMessageBox.warning(
                 self.ui,
                 "error in thread_run_btn"
             )
+
+    # 获取图像当前名称
+    def get_image_name(self):
+        # 2. 选取1个文件名image, 获取其image_1, ...,  iamge_3
+        #       切换image的同时, 还需要显示其对应的高度
+        if self.image_pos >= len(self.image_list):
+            return ""
+        else:
+            print("*" * 15 + "run to get image name" + "*" * 15)
+            self.image_now_name = self.image_list[self.image_pos]
+            
+            # 起一个新线程
+            self.update_image_name()
+            
+            return self.image_now_name
+        
+    # 
+    def update_image_name(self):
+        # 3. 线程计数15秒
+        # 需要每隔15秒更新一次 self.image_pos
+        
+        print("*" * 15 + "run to update image name" + "*" * 15)
+        
+        if self.flag_time == 1:
+            # 计时正在运行中
+            return
+                
+        self.thread_time_value = threading.Thread(name='thread_time'+str(self.num_thread_run), target=self.thread_time)
+        
+        self.lock_time.acquire()
+        self.flag_time = 1
+        self.num_thread_time += 1
+        self.thread_time_value.start()
+        self.lock_time.release()
+    
+    def thread_time(self):
+        # 等待15秒
+        time.sleep(5)
+        # 切换到下一个图片
+        self.image_pos += 1   
+        # 计时结束, flag归为, 可再次计时
+        self.flag_time = 0
+        # 刷新为新的image
+        self.update_new_full_image()
+        
+    def update_new_full_image(self, filename=""):
+        
+        filename = self.get_image_name()
+        
+        path_image_temp = self.image_base_path + "/image2_temp/" + filename
+
+        if filename == "":
+            return 
+        else:
+            # 显示完整分割图像
+            pixmap = QPixmap(path_image_temp + "_4.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            # pixmap = QPixmap(self.image_base_path + "/iamge3_result/" + filename + ".png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            self.ui.label_image.setPixmap(pixmap)
+            self.ui.label_image.repaint()
+            
+        # 4. 切换到下一个image
 
     def show_pic(self):
         '''
@@ -179,37 +265,41 @@ class Win_Main(QMainWindow):
         # show_label_img(self.images)
         self.n += 1
 
-    def layer_select(self, layer=0):
-        pass
-        # btn_plasma 血浆
-        # btn_RBCs 红细胞
-        # btn_Buffy 白细胞和血小板
+    def layer_select(self, layer=0, filename=""):
+        # btn_plasma 血浆               上  _1
+        # btn_RBCs 红细胞               下  _3
+        # btn_Buffy 白细胞和血小板       中  _2
+        path_image_temp = self.image_base_path + "/image2_temp/" + filename
+
+        if filename == "":
+            return
         if layer == 0:
             # 显示完整分割图像
             # pass
             print("显示完整分割图像")
-            pixmap = QPixmap("./image/test_image.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            pixmap = QPixmap(path_image_temp + "_4.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            # pixmap = QPixmap(self.image_base_path + "/iamge3_result/" + filename + ".png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
             self.ui.label_image.setPixmap(pixmap)
             self.ui.label_image.repaint()
         elif layer == 1:
             # 显示 btn_plasma 血浆
             # pass
             print("显示 btn_plasma 血浆")
-            pixmap = QPixmap("./image/image_1.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            pixmap = QPixmap(path_image_temp + "_1.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
             self.ui.label_image.setPixmap(pixmap)
             self.ui.label_image.repaint()
         elif layer == 2:
             # 显示 btn_RBCs 红细胞
             # pass
             print("显示 btn_RBCs 红细胞")
-            pixmap = QPixmap("./image/image_2.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            pixmap = QPixmap(path_image_temp + "_3.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
             self.ui.label_image.setPixmap(pixmap)
             self.ui.label_image.repaint()
         elif layer == 3:
             # 显示 btn_Buffy 白细胞和血小板
             # pass
             print("显示 btn_Buffy 白细胞和血小板")
-            pixmap = QPixmap("./image/image_3.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+            pixmap = QPixmap(path_image_temp + "_2.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
             self.ui.label_image.setPixmap(pixmap)
             self.ui.label_image.repaint()
 
@@ -225,12 +315,16 @@ class Win_Main(QMainWindow):
             # 1 保存推理完整图片
             # 2 保存三种不同语义图片
             # 3 计算血浆高度
-        
-
-
         pixmap = QPixmap("./image/test_image.png").scaled(self.ui.label_image.size(), aspectMode=Qt.KeepAspectRatio)
+        
+        painter=QPainter()
+        
+        painter.begin(pixmap)
+        
         self.ui.label_image.setPixmap(pixmap)
         self.ui.label_image.repaint()
+        
+        painter.end()
 
         # 程序运行结束, flag归位, 可再次运行
         self.flag_run = 0
@@ -239,7 +333,6 @@ class Win_Main(QMainWindow):
 
     def stop_botton(self, input=0):
         print("stop")
-        # print("input: ", input)
 
     def exit_botton(self):
         SI.mainWin.ui.close()

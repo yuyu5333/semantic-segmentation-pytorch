@@ -45,4 +45,4 @@ TEST:
 
   
 
-DIR: "ckpt/ade20k-mobilenetv2dilated-c1_deepsup"
+DIR: "ckpt/mobilenet"
