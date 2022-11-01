@@ -20,9 +20,9 @@ class SegmentationModuleBase(nn.Module):
         # FP : pred: i, real: not i
         # FN : pred: not i, real: i
         # TN : pred: not i, real: not i
-        TP = torch.zeros(number_class).cuda(1)
-        FP = torch.zeros(number_class).cuda(1)
-        FN = torch.zeros(number_class).cuda(1)
+        TP = torch.zeros(number_class).cuda(0)
+        FP = torch.zeros(number_class).cuda(0)
+        FN = torch.zeros(number_class).cuda(0)
         # TN = torch.zeros(number_class).cuda(1)
         for label_i in range(0,number_class):
             preds_sub = torch.clone(preds)
@@ -97,7 +97,7 @@ class ModelBuilder:
         net_encoder = MobileNetV2Dilated(orig_mobilenet, dilate_scale=8)
 
         net_encoder.load_state_dict(
-                torch.load("../ckpt/mobilenet/encoder_epoch_20.pth"), strict=False)
+                torch.load("../ckpt/mobilenet_cpu/encoder.pth"), strict=False)
         return net_encoder
 
     @staticmethod
@@ -112,7 +112,7 @@ class ModelBuilder:
 
 
         net_decoder.load_state_dict(
-                torch.load("../ckpt/mobilenet/encoder_epoch_20.pth"), strict=False)
+                torch.load("../ckpt/mobilenet_cpu/decoder.pth"), strict=False)
             # net_decoder.load_state_dict(
             #     torch.load(weights, map_location=lambda storage, loc: storage), strict=False)
         return net_decoder
