@@ -41,7 +41,7 @@ TEST:
   tem_result: "../image/image2_temp/"
   imgs: "../image/image1_input/"
   gpu: 0
-  height_result: "../height_result.json"
+  height_result: "../image/image2_temp/height_result.json"
 
   
 
